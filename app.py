@@ -73,7 +73,12 @@ def list_sites():
         rows = conn.execute(
             "SELECT * FROM sites ORDER BY COALESCE(last_scraped,'') DESC, id DESC"
         ).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        site = dict(r)
+        site["frontier_count"] = _count_frontier(site["db_path"])
+        out.append(site)
+    return out
 
 
 @app.get("/api/pdfs")
@@ -405,6 +410,20 @@ def _count_pdfs(db_path) -> int:
         return 0
     with get_site_db(db_path) as conn:
         return conn.execute("SELECT COUNT(*) FROM pdfs").fetchone()[0]
+
+
+def _count_frontier(db_path) -> int:
+    """URLs the crawler has discovered but not yet visited (queued for a Continue)."""
+    if not Path(db_path).exists():
+        return 0
+    try:
+        with get_site_db(db_path) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM crawl_state WHERE visited = 0"
+            ).fetchone()
+            return row[0] if row else 0
+    except Exception:
+        return 0
 
 
 def _load_crawl_state(db_path):

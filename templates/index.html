@@ -33,6 +33,7 @@
   .site-row .url-sub { display: block; font-size: 0.78rem; color: #888; word-break: break-all; margin-top: 0.1rem; }
   .site-row .url-sub:hover { color: #2563eb; }
   .site-row .meta { color: #666; white-space: nowrap; font-size: 0.85rem; }
+  .site-row .meta.queued { color: #92400e; font-weight: 500; }
   .site-row .dbpath { color: #888; font-family: ui-monospace, monospace; font-size: 0.8rem; }
   .site-row .badge { padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.75rem; background: #eef; color: #335; }
   .site-row .badge.ok { background: #ecfdf5; color: #065f46; }
@@ -276,12 +277,14 @@ function shortPath(p) {
 function renderSites() {
   const el = $('#sites');
   const totalPdfs = allSites.reduce((a, s) => a + (s.pdf_count || 0), 0);
+  const totalQueued = allSites.reduce((a, s) => a + (s.frontier_count || 0), 0);
   const allRow = `
     <div class="site-row all ${selectedSiteId == null ? 'selected' : ''}" data-site="all">
       <div class="site-row-info">
         <span class="src">All sites</span>
         <span class="meta">${allSites.length} site${allSites.length === 1 ? '' : 's'}</span>
         <span class="meta">${totalPdfs} PDFs</span>
+        ${totalQueued > 0 ? `<span class="meta queued" title="URLs discovered but not yet visited across all sites">${totalQueued} queued</span>` : ''}
       </div>
     </div>`;
   if (!allSites.length) {
@@ -309,6 +312,7 @@ function renderSites() {
           ${s.use_browser ? '<span class="badge browser" title="Pages rendered with a real browser">browser</span>' : ''}
           <span class="badge ${badgeClass(s.status)}">${esc(statusLabel(s))}</span>
           <span class="meta">${s.pdf_count} PDFs</span>
+          ${s.frontier_count > 0 ? `<span class="meta queued" title="URLs discovered but not yet visited — click Continue to keep crawling">${s.frontier_count} queued</span>` : ''}
           <span class="meta">${esc(s.last_scraped || 'never')}</span>
           <span class="dbpath" title="${esc(s.db_path)}">${esc(shortPath(s.db_path))}</span>
           ${s.error ? `<span class="err" title="${esc(s.error)}">!</span>` : ''}
