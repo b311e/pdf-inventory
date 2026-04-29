@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.Python
+
+# SQLite databases — local data, do not commit
+registry.db
+registry.db-journal
+registry.db-wal
+registry.db-shm
+data/
+pdfs.db
+pdfs.db-journal
+pdfs.db-wal
+pdfs.db-shm
+pdfs.db.legacy
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code local settings/memory
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PDF Inventory</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding: 1.5rem; color: #222; }
+  h1 { margin-top: 0; }
+  h2 { margin-top: 2rem; font-size: 1.1rem; color: #444; }
+  .scrape-form { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem; align-items: stretch; }
+  .scrape-form textarea { flex: 1 1 360px; min-width: 240px; min-height: 5rem; padding: 0.5rem 0.75rem; font-size: 0.95rem; font-family: inherit; border: 1px solid #ccc; border-radius: 4px; resize: vertical; box-sizing: border-box; }
+  .scrape-form .controls { display: flex; flex-direction: column; gap: 0.5rem; width: 280px; flex-shrink: 0; }
+  .scrape-form .controls > select, .scrape-form .controls > button, .scrape-form .controls > .row { width: 100%; box-sizing: border-box; }
+  .scrape-form select { padding: 0.4rem; font-size: 0.9rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+  .scrape-form .row { display: flex; gap: 0.5rem; align-items: center; }
+  .scrape-form .row label { flex: 1 1 0; font-size: 0.8rem; color: #555; display: flex; align-items: center; gap: 0.3rem; min-width: 0; }
+  .scrape-form .row input[type="number"] { flex: 1 1 0; min-width: 0; padding: 0.4rem; font-size: 0.9rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+  .scrape-form button { padding: 0.5rem 1.25rem; font-size: 1rem; background: #2563eb; color: white; border: 0; border-radius: 4px; cursor: pointer; }
+  .scrape-form button:disabled { background: #999; cursor: not-allowed; }
+  .hint { font-size: 0.8rem; color: #777; margin-top: -0.4rem; margin-bottom: 1rem; }
+  .status { padding: 0.5rem 0.75rem; margin-bottom: 1rem; border-radius: 4px; font-size: 0.9rem; }
+  .status.ok { background: #ecfdf5; color: #065f46; }
+  .status.error { background: #fef2f2; color: #991b1b; }
+  .status.busy { background: #eff6ff; color: #1e40af; }
+  .site-row { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.55rem 0.6rem; border-bottom: 1px solid #eee; font-size: 0.9rem; cursor: pointer; border-left: 3px solid transparent; }
+  .site-row:hover { background: #fafafa; }
+  .site-row.selected { background: #eff6ff; border-left-color: #2563eb; }
+  .site-row.all { font-weight: 600; }
+  .site-row-info { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+  .site-row-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .site-row a.src, .site-row .src { flex: 1 1 250px; word-break: break-all; min-width: 0; }
+  .site-row .name { font-weight: 600; }
+  .site-row .url-sub { display: block; font-size: 0.78rem; color: #888; word-break: break-all; margin-top: 0.1rem; }
+  .site-row .url-sub:hover { color: #2563eb; }
+  .site-row .meta { color: #666; white-space: nowrap; font-size: 0.85rem; }
+  .site-row .dbpath { color: #888; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+  .site-row .badge { padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.75rem; background: #eef; color: #335; }
+  .site-row .badge.ok { background: #ecfdf5; color: #065f46; }
+  .site-row .badge.error, .site-row .badge.interrupted, .site-row .badge.cancelled { background: #fef2f2; color: #991b1b; }
+  .site-row .badge.busy { background: #eff6ff; color: #1e40af; }
+  .site-row .badge.browser { background: #fef3c7; color: #92400e; }
+  .scrape-form .checkbox-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: #555; }
+  .site-row button { padding: 0.2rem 0.55rem; font-size: 0.8rem; background: transparent; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; }
+  .site-row button:hover { background: #f3f3f3; }
+  .site-row button[data-delete-site] { color: #b91c1c; border-color: #fca5a5; }
+  .site-row button[data-delete-site]:hover { background: #fee2e2; border-color: #b91c1c; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 1920px; }
+  th, td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid #eee; vertical-align: top; }
+  th { background: #f5f5f5; cursor: pointer; user-select: none; position: sticky; top: 0; white-space: nowrap; }
+  th:hover { background: #ebebeb; }
+  th .arrow { color: #999; margin-left: 0.25rem; }
+  td a { color: #2563eb; word-break: break-all; }
+  td.num { text-align: right; white-space: nowrap; }
+  td.date { white-space: nowrap; }
+  th.cell-title, td.cell-title { min-width: 320px; max-width: 600px; }
+  td.cell-title { word-break: break-word; overflow-wrap: anywhere; white-space: normal; }
+  td.yesno { text-align: center; white-space: nowrap; }
+  td.yesno.yes { color: #065f46; font-weight: 600; }
+  td.yesno.no { color: #991b1b; }
+  .tabs { display: flex; gap: 0.25rem; margin: 1.5rem 0 1rem; border-bottom: 2px solid #eee; }
+  .tab { padding: 0.5rem 1rem; cursor: pointer; border: 0; background: transparent; font-size: 1rem; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; font-family: inherit; }
+  .tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+  .tab:hover { color: #2563eb; }
+  .report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+  .stat-card { padding: 0.85rem 1rem; background: #fafafa; border: 1px solid #eee; border-radius: 6px; }
+  .stat-card .label { font-size: 0.8rem; color: #666; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-card .value { font-size: 1.6rem; font-weight: 600; color: #222; }
+  .stat-card .sub { font-size: 0.85rem; color: #888; margin-top: 0.2rem; }
+  .top-list { background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 0.85rem 1rem; margin-bottom: 1rem; }
+  .top-list h3 { margin: 0 0 0.5rem; font-size: 0.95rem; color: #444; }
+  .top-list table { width: 100%; min-width: 0; font-size: 0.88rem; }
+  .top-list td { padding: 0.25rem 0.5rem; border: 0; vertical-align: top; }
+  .top-list td.count { text-align: right; font-weight: 600; color: #2563eb; white-space: nowrap; width: 1%; }
+  .report-section-title { margin: 1.25rem 0 0.5rem; font-size: 0.95rem; color: #444; font-weight: 600; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+  .export-btn { padding: 0.4rem 0.85rem; font-size: 0.85rem; background: #fff; border: 1px solid #2563eb; color: #2563eb; border-radius: 4px; cursor: pointer; }
+  .export-btn:hover { background: #eff6ff; }
+  .export-btn:disabled { color: #999; border-color: #ccc; background: #f5f5f5; cursor: not-allowed; }
+  .filter { margin-bottom: 0.75rem; display: flex; gap: 0.75rem; align-items: center; }
+  .filter input { padding: 0.4rem 0.6rem; font-size: 0.95rem; width: 360px; border: 1px solid #ccc; border-radius: 4px; }
+  .filter .count { color: #666; font-size: 0.9rem; }
+  .empty { color: #888; padding: 1rem; text-align: center; }
+  .err { color: #b91c1c; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+  <h1>PDF Inventory</h1>
+
+  <form class="scrape-form" id="scrape-form">
+    <textarea name="urls" placeholder="https://example.com&#10;Colorado Ballot History | https://www.leg.state.co.us/lcs/ballothistory.nsf/&#10;Senate Records | https://www.leg.state.co.us/inethsr.nsf/" required></textarea>
+    <div class="controls">
+      <select name="mode">
+        <option value="crawl" selected>Crawl whole site</option>
+        <option value="page">Single page</option>
+      </select>
+      <div class="row">
+        <label title="Max pages to crawl per site">pages <input type="number" name="max_pages" value="100" min="1" max="5000"></label>
+        <label title="Max link depth from start URL">depth <input type="number" name="max_depth" value="3" min="1" max="10"></label>
+      </div>
+      <label class="checkbox-row" title="Use a real browser to render JS-heavy sites. Slower; requires `python -m playwright install chromium`.">
+        <input type="checkbox" name="use_browser"> Use browser (for JS sites)
+      </label>
+      <button type="submit">Scrape</button>
+    </div>
+  </form>
+  <div class="hint">One per line. Add a custom name with <code>Name | URL</code>. Each URL gets its own database file under <code>data/</code>.</div>
+  <div id="status"></div>
+
+  <h2>Sites</h2>
+  <div id="sites"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="inventory">Inventory</button>
+    <button class="tab" data-tab="reports">Reports</button>
+  </div>
+
+  <div id="tab-inventory" class="tab-panel">
+  <div class="toolbar">
+    <h2 id="pdfs-heading" style="margin:0">PDFs</h2>
+    <div style="display:flex; gap:0.4rem">
+      <button class="export-btn" id="export-inventory" title="Export the currently filtered and sorted rows for the selected site">Export Filtered</button>
+      <button class="export-btn" id="export-all-inventory" title="Export every PDF across every site, ignoring the current filter and site selection">Export All</button>
+    </div>
+  </div>
+  <div class="filter">
+    <input type="text" id="filter" placeholder="Filter by title, author, URL...">
+    <span class="count" id="count"></span>
+  </div>
+  <div class="table-wrap">
+  <table id="pdf-table">
+    <thead>
+      <tr>
+        <th data-sort="title" class="cell-title">Document Title</th>
+        <th data-sort="filename">File Name</th>
+        <th data-sort="author">Author</th>
+        <th data-sort="creation_date">Date Created</th>
+        <th data-sort="mod_date">Date Updated</th>
+        <th data-sort="tagged">Tagged PDF</th>
+        <th data-sort="pdf_ua">PDF/UA</th>
+        <th data-sort="creator">PDF Application</th>
+        <th data-sort="producer">PDF Producer</th>
+        <th data-sort="found_on">Source URL</th>
+        <th>PDF Link</th>
+        <th data-sort="scraped_at">Date Scraped</th>
+        <th data-sort="page_count" class="num">Pages</th>
+        <th data-sort="size_bytes" class="num">File Size</th>
+        <th data-sort="site_name">Application</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  </div>
+  </div>
+
+  <div id="tab-reports" class="tab-panel" style="display:none">
+    <div class="toolbar">
+      <h2 id="reports-heading" style="margin:0">Reports</h2>
+      <button class="export-btn" id="export-reports">Export CSV</button>
+    </div>
+    <div id="reports-content"></div>
+  </div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const fmtSize = (b) => {
+  if (b == null) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  return (b / (1024 * 1024)).toFixed(1) + ' MB';
+};
+// PDF dates look like `D:20240115093000-08'00'` or `D:20211207`. Show first 8 digits as YYYY-MM-DD.
+const fmtPdfDate = (s) => {
+  if (!s) return '';
+  const m = String(s).match(/(\d{4})(\d{2})(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : String(s);
+};
+const fmtScrapedDate = (s) => {
+  if (!s) return '';
+  // Stored as ISO 8601 like "2026-04-28T01:30:00+00:00" — show date + time minute.
+  return String(s).replace('T', ' ').slice(0, 16);
+};
+const fmtYesNo = (v) => {
+  if (v === 1 || v === true) return { label: 'Yes', cls: 'yes' };
+  if (v === 0 || v === false) return { label: 'No', cls: 'no' };
+  return { label: '', cls: '' };
+};
+const fileNameFromUrl = (u) => {
+  if (!u) return '';
+  try {
+    const path = new URL(u).pathname;
+    const last = path.split('/').filter(Boolean).pop() || '';
+    return decodeURIComponent(last);
+  } catch (e) {
+    return (String(u).split('/').pop() || '').split('?')[0];
+  }
+};
+const esc = (s) => s == null ? '' : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const trunc = (s, n) => s && s.length > n ? s.slice(0, n) + '…' : (s || '');
+
+const BUSY_STATUSES = new Set(['pending', 'running', 'crawling', 'scanning', 'extracting']);
+let allPdfs = [];
+let allSites = [];
+let selectedSiteId = null; // null = all sites
+let sortKey = 'scraped_at';
+let sortDir = -1;
+let pollTimer = null;
+
+async function loadSitesAndPdfs() {
+  try {
+    const sRes = await fetch('/api/sites');
+    allSites = await sRes.json();
+    renderSites();
+    managePolling();
+    await loadPdfs();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function loadPdfs() {
+  const url = selectedSiteId == null ? '/api/pdfs' : `/api/pdfs?site_id=${selectedSiteId}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      // The selected site may have been deleted between renders.
+      if (res.status === 404) { selectedSiteId = null; return loadPdfs(); }
+      throw new Error('Failed to load PDFs');
+    }
+    allPdfs = await res.json();
+    renderPdfs();
+    if (activeTab === 'reports') renderReports();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function managePolling() {
+  const busy = allSites.some(s => BUSY_STATUSES.has(s.status));
+  if (busy && !pollTimer) {
+    pollTimer = setInterval(loadSitesAndPdfs, 1500);
+  } else if (!busy && pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function statusLabel(s) {
+  if (s.status === 'pending') return 'queued';
+  if (BUSY_STATUSES.has(s.status)) {
+    const pv = s.pages_visited || 0;
+    const pt = Math.max(s.pages_total || 0, pv);
+    const pd = s.pdf_count || 0;
+    const pf = Math.max(s.pdfs_total || 0, pd);
+    return `running · pages ${pv}/${pt} · pdfs ${pd}/${pf}`;
+  }
+  if (s.status === 'cancelled') return 'cancelled';
+  if (s.status === 'interrupted') return 'interrupted';
+  return s.status || '';
+}
+
+function badgeClass(status) {
+  if (status === 'ok') return 'ok';
+  if (status === 'error' || status === 'cancelled' || status === 'interrupted') return status;
+  if (BUSY_STATUSES.has(status)) return 'busy';
+  return '';
+}
+
+function shortPath(p) {
+  if (!p) return '';
+  const norm = p.replace(/\\/g, '/');
+  const i = norm.lastIndexOf('/data/');
+  return i >= 0 ? norm.slice(i + 1) : norm;
+}
+
+function renderSites() {
+  const el = $('#sites');
+  const totalPdfs = allSites.reduce((a, s) => a + (s.pdf_count || 0), 0);
+  const allRow = `
+    <div class="site-row all ${selectedSiteId == null ? 'selected' : ''}" data-site="all">
+      <div class="site-row-info">
+        <span class="src">All sites</span>
+        <span class="meta">${allSites.length} site${allSites.length === 1 ? '' : 's'}</span>
+        <span class="meta">${totalPdfs} PDFs</span>
+      </div>
+    </div>`;
+  if (!allSites.length) {
+    el.innerHTML = allRow + '<div class="empty">No sites yet — paste one or more URLs above to start.</div>';
+    bindSiteClicks();
+    return;
+  }
+  const rows = allSites.map(s => {
+    const busy = BUSY_STATUSES.has(s.status);
+    const main = s.name
+      ? `<div class="src">
+           <span class="name">${esc(s.name)}</span>
+           <a class="url-sub" href="${esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(s.url)}</a>
+         </div>`
+      : `<a class="src" href="${esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(s.url)}</a>`;
+    const runActions = busy
+      ? `<button data-cancel="${s.id}">Cancel</button>`
+      : `<button data-rescrape="${esc(s.url)}" data-mode="${esc(s.mode || 'page')}" data-use-browser="${s.use_browser ? '1' : '0'}">Rescrape</button>
+         <button data-continue="${s.id}" title="Pick up where the last crawl stopped — skips pages already visited and PDFs already fetched">Continue</button>`;
+    return `
+      <div class="site-row ${selectedSiteId === s.id ? 'selected' : ''}" data-site="${s.id}">
+        <div class="site-row-info">
+          ${main}
+          <span class="badge">${esc(s.mode || 'page')}</span>
+          ${s.use_browser ? '<span class="badge browser" title="Pages rendered with a real browser">browser</span>' : ''}
+          <span class="badge ${badgeClass(s.status)}">${esc(statusLabel(s))}</span>
+          <span class="meta">${s.pdf_count} PDFs</span>
+          <span class="meta">${esc(s.last_scraped || 'never')}</span>
+          <span class="dbpath" title="${esc(s.db_path)}">${esc(shortPath(s.db_path))}</span>
+          ${s.error ? `<span class="err" title="${esc(s.error)}">!</span>` : ''}
+        </div>
+        <div class="site-row-actions">
+          <button data-rename="${s.id}" data-current="${esc(s.name || '')}">Rename</button>
+          ${runActions}
+          <button data-delete-site="${s.id}">Delete</button>
+        </div>
+      </div>`;
+  }).join('');
+  el.innerHTML = allRow + rows;
+  bindSiteClicks();
+}
+
+function bindSiteClicks() {
+  document.querySelectorAll('.site-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      // Ignore clicks on buttons/links inside the row.
+      if (e.target.closest('button') || e.target.closest('a')) return;
+      const sid = row.dataset.site;
+      const newSel = sid === 'all' ? null : Number(sid);
+      if (newSel === selectedSiteId) return;
+      selectedSiteId = newSel;
+      const heading = $('#pdfs-heading');
+      heading.textContent = newSel == null ? 'PDFs (all sites)' : 'PDFs from selected site';
+      renderSites();
+      loadPdfs();
+    });
+  });
+}
+
+function renderPdfs() {
+  const filter = $('#filter').value.trim().toLowerCase();
+  // Augment rows with derived `filename` so it can be filtered/sorted.
+  let rows = allPdfs.map(p => ({ ...p, filename: fileNameFromUrl(p.url) }));
+  if (filter) {
+    rows = rows.filter(p =>
+      [p.site_name, p.title, p.filename, p.author, p.url, p.found_on, p.source_url, p.subject, p.creator, p.producer]
+        .some(v => v && v.toLowerCase().includes(filter))
+    );
+  }
+  rows.sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sortDir;
+    return String(av).localeCompare(String(bv)) * sortDir;
+  });
+
+  $('#count').textContent = `${rows.length} of ${allPdfs.length}`;
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    const arrow = th.dataset.sort === sortKey ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+    const label = th.textContent.replace(/\s*[▲▼]\s*$/, '').trim();
+    th.innerHTML = esc(label) + `<span class="arrow">${arrow}</span>`;
+  });
+
+  const tbody = $('#pdf-table tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="15" class="empty">No PDFs match.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(p => {
+    const tagged = fmtYesNo(p.tagged);
+    const pdfua = fmtYesNo(p.pdf_ua);
+    return `
+    <tr>
+      <td class="cell-title">${esc(p.title || '(no title)')}${p.fetch_error ? `<div class="err">${esc(p.fetch_error)}</div>` : ''}</td>
+      <td>${esc(p.filename)}</td>
+      <td>${esc(p.author || '')}</td>
+      <td class="date" title="${esc(p.creation_date || '')}">${esc(fmtPdfDate(p.creation_date))}</td>
+      <td class="date" title="${esc(p.mod_date || '')}">${esc(fmtPdfDate(p.mod_date))}</td>
+      <td class="yesno ${tagged.cls}">${tagged.label}</td>
+      <td class="yesno ${pdfua.cls}">${pdfua.label}</td>
+      <td>${esc(p.creator || '')}</td>
+      <td>${esc(p.producer || '')}</td>
+      <td>${p.found_on
+        ? `<a href="${esc(p.found_on)}" target="_blank" rel="noopener" title="${esc(p.found_on)}">${esc(trunc(p.found_on, 50))}</a>`
+        : ''}</td>
+      <td><a href="${esc(p.url)}" target="_blank" rel="noopener">Open PDF</a></td>
+      <td class="date">${esc(fmtScrapedDate(p.scraped_at))}</td>
+      <td class="num">${p.page_count ?? ''}</td>
+      <td class="num">${fmtSize(p.size_bytes)}</td>
+      <td>${esc(p.site_name || '')}</td>
+    </tr>
+  `;
+  }).join('');
+}
+
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const k = th.dataset.sort;
+    if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = 1; }
+    renderPdfs();
+  });
+});
+
+// --- CSV export ----------------------------------------------------------
+function csvEscape(v) {
+  if (v == null) return '';
+  const s = String(v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function downloadCsv(filename, lines) {
+  // ﻿ BOM so Excel opens UTF-8 with the right encoding by default.
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function visibleSortedPdfs() {
+  const filter = $('#filter').value.trim().toLowerCase();
+  let rows = allPdfs.map(p => ({ ...p, filename: fileNameFromUrl(p.url) }));
+  if (filter) {
+    rows = rows.filter(p =>
+      [p.site_name, p.title, p.filename, p.author, p.url, p.found_on, p.source_url, p.subject, p.creator, p.producer]
+        .some(v => v && v.toLowerCase().includes(filter))
+    );
+  }
+  rows.sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sortDir;
+    return String(av).localeCompare(String(bv)) * sortDir;
+  });
+  return rows;
+}
+
+function exportInventoryCsv() {
+  const rows = visibleSortedPdfs();
+  if (!rows.length) { alert('No PDFs to export.'); return; }
+
+  const headers = [
+    'Document Title', 'File Name', 'Author',
+    'Date Created (formatted)', 'Date Created (raw)',
+    'Date Updated (formatted)', 'Date Updated (raw)',
+    'Tagged PDF', 'PDF/UA',
+    'PDF Application', 'PDF Producer',
+    'Source URL', 'PDF Link', 'Date Scraped',
+    'Pages', 'File Size (bytes)', 'Application',
+  ];
+
+  const yesNo = (v) => v === 1 ? 'Yes' : v === 0 ? 'No' : '';
+
+  const lines = [headers.map(csvEscape).join(',')];
+  for (const p of rows) {
+    lines.push([
+      p.title || '',
+      p.filename || '',
+      p.author || '',
+      fmtPdfDate(p.creation_date),
+      p.creation_date || '',
+      fmtPdfDate(p.mod_date),
+      p.mod_date || '',
+      yesNo(p.tagged),
+      yesNo(p.pdf_ua),
+      p.creator || '',
+      p.producer || '',
+      p.found_on || '',
+      p.url || '',
+      p.scraped_at || '',
+      p.page_count ?? '',
+      p.size_bytes ?? '',
+      p.site_name || '',
+    ].map(csvEscape).join(','));
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const scope = selectedSiteId == null ? 'all-sites' : 'site';
+  downloadCsv(`pdf-inventory-${scope}-${stamp}.csv`, lines);
+}
+
+function exportReportsCsv() {
+  if (!allPdfs.length) { alert('No PDFs to report on.'); return; }
+
+  const total = allPdfs.length;
+  const totalPages = allPdfs.reduce((s, p) => s + (p.page_count || 0), 0);
+  const totalBytes = allPdfs.reduce((s, p) => s + (p.size_bytes || 0), 0);
+  const errors = allPdfs.filter(p => p.fetch_error).length;
+  const taggedYes = allPdfs.filter(p => p.tagged === 1).length;
+  const taggedNo = allPdfs.filter(p => p.tagged === 0).length;
+  const taggedUnknown = total - taggedYes - taggedNo;
+  const pdfuaYes = allPdfs.filter(p => p.pdf_ua === 1).length;
+  const pdfuaNo = allPdfs.filter(p => p.pdf_ua === 0).length;
+  const pct = (n) => total ? Math.round(n / total * 100) : 0;
+
+  const dateStrings = allPdfs
+    .map(p => {
+      const m = String(p.creation_date || '').match(/(\d{4})(\d{2})(\d{2})/);
+      return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+    })
+    .filter(Boolean).sort();
+
+  const lines = [];
+  const section = (title) => { lines.push(''); lines.push(csvEscape(title)); };
+  const kv = (k, v) => lines.push(`${csvEscape(k)},${csvEscape(v)}`);
+
+  lines.push('Metric,Value');
+  section('Overview');
+  kv('Total PDFs', total);
+  kv('Total Pages', totalPages);
+  kv('Total Size (bytes)', totalBytes);
+  kv('Errors', errors);
+  kv('Errors %', pct(errors) + '%');
+
+  section('Accessibility');
+  kv('Tagged Yes', taggedYes);
+  kv('Tagged No', taggedNo);
+  kv('Tagged Unknown', taggedUnknown);
+  kv('Tagged Yes %', pct(taggedYes) + '%');
+  kv('PDF/UA Yes', pdfuaYes);
+  kv('PDF/UA No', pdfuaNo);
+  kv('PDF/UA Yes %', pct(pdfuaYes) + '%');
+
+  if (dateStrings.length) {
+    section('Creation Dates');
+    kv('Oldest', dateStrings[0]);
+    kv('Newest', dateStrings[dateStrings.length - 1]);
+  }
+
+  const breakdownSection = (title, entries) => {
+    if (!entries.length) return;
+    section(title);
+    lines.push('Value,Count');
+    for (const [name, count] of entries) {
+      lines.push(`${csvEscape(name)},${csvEscape(count)}`);
+    }
+  };
+  if (selectedSiteId == null) breakdownSection('PDFs per Application (site)', countBy(allPdfs, 'site_name'));
+  breakdownSection('PDFs per PDF Application (Creator)', countBy(allPdfs, 'creator'));
+  breakdownSection('PDFs per PDF Producer', countBy(allPdfs, 'producer'));
+  breakdownSection('PDFs per Author', countBy(allPdfs, 'author'));
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const scope = selectedSiteId == null ? 'all-sites' : 'site';
+  downloadCsv(`pdf-inventory-report-${scope}-${stamp}.csv`, lines);
+}
+
+function pdfRowToCsvFields(p) {
+  const yesNo = (v) => v === 1 ? 'Yes' : v === 0 ? 'No' : '';
+  return [
+    p.title || '',
+    p.filename || fileNameFromUrl(p.url),
+    p.author || '',
+    fmtPdfDate(p.creation_date),
+    p.creation_date || '',
+    fmtPdfDate(p.mod_date),
+    p.mod_date || '',
+    yesNo(p.tagged),
+    yesNo(p.pdf_ua),
+    p.creator || '',
+    p.producer || '',
+    p.found_on || '',
+    p.url || '',
+    p.scraped_at || '',
+    p.page_count ?? '',
+    p.size_bytes ?? '',
+    p.site_name || '',
+  ];
+}
+
+const INVENTORY_CSV_HEADERS = [
+  'Document Title', 'File Name', 'Author',
+  'Date Created (formatted)', 'Date Created (raw)',
+  'Date Updated (formatted)', 'Date Updated (raw)',
+  'Tagged PDF', 'PDF/UA',
+  'PDF Application', 'PDF Producer',
+  'Source URL', 'PDF Link', 'Date Scraped',
+  'Pages', 'File Size (bytes)', 'Application',
+];
+
+async function exportAllInventoryCsv() {
+  const btn = $('#export-all-inventory');
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Loading...';
+  try {
+    const res = await fetch('/api/pdfs');
+    if (!res.ok) throw new Error('Failed to fetch PDFs');
+    let pdfs = await res.json();
+    if (!pdfs.length) { alert('No PDFs to export.'); return; }
+    // Stable order: by site, then by title.
+    pdfs.sort((a, b) =>
+      (a.site_name || '').localeCompare(b.site_name || '') ||
+      (a.title || '').localeCompare(b.title || '')
+    );
+    const lines = [INVENTORY_CSV_HEADERS.map(csvEscape).join(',')];
+    for (const p of pdfs) {
+      lines.push(pdfRowToCsvFields(p).map(csvEscape).join(','));
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(`pdf-inventory-all-${stamp}.csv`, lines);
+  } catch (e) {
+    alert(`Export failed: ${e.message}`);
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+
+$('#export-inventory').addEventListener('click', exportInventoryCsv);
+$('#export-all-inventory').addEventListener('click', exportAllInventoryCsv);
+$('#export-reports').addEventListener('click', exportReportsCsv);
+
+// --- Tabs ----------------------------------------------------------------
+let activeTab = 'inventory';
+
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === btn));
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.style.display = p.id === `tab-${activeTab}` ? '' : 'none';
+    });
+    if (activeTab === 'reports') renderReports();
+  });
+});
+
+// --- Reports -------------------------------------------------------------
+function countBy(items, key) {
+  const counts = new Map();
+  for (const p of items) {
+    const v = p[key];
+    if (!v) continue;
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function topListHtml(title, entries, limit = 10) {
+  if (!entries.length) return '';
+  const rows = entries.slice(0, limit).map(([name, count]) =>
+    `<tr><td>${esc(name)}</td><td class="count">${count}</td></tr>`
+  ).join('');
+  const more = entries.length > limit ? `<div class="sub" style="color:#888;font-size:0.8rem;margin-top:0.4rem">+ ${entries.length - limit} more</div>` : '';
+  return `<div class="top-list"><h3>${esc(title)}</h3><table>${rows}</table>${more}</div>`;
+}
+
+function statCard(label, value, sub) {
+  return `<div class="stat-card">
+    <div class="label">${esc(label)}</div>
+    <div class="value">${value}</div>
+    ${sub ? `<div class="sub">${sub}</div>` : ''}
+  </div>`;
+}
+
+function renderReports() {
+  const el = $('#reports-content');
+  const heading = $('#reports-heading');
+  heading.textContent = selectedSiteId == null ? 'Reports (all sites)' : 'Reports for selected site';
+
+  if (!allPdfs.length) {
+    el.innerHTML = '<div class="empty">No PDFs to report on.</div>';
+    return;
+  }
+
+  const total = allPdfs.length;
+  const totalPages = allPdfs.reduce((s, p) => s + (p.page_count || 0), 0);
+  const totalBytes = allPdfs.reduce((s, p) => s + (p.size_bytes || 0), 0);
+  const errors = allPdfs.filter(p => p.fetch_error).length;
+  const taggedYes = allPdfs.filter(p => p.tagged === 1).length;
+  const taggedNo = allPdfs.filter(p => p.tagged === 0).length;
+  const taggedUnknown = total - taggedYes - taggedNo;
+  const pdfuaYes = allPdfs.filter(p => p.pdf_ua === 1).length;
+  const pdfuaNo = allPdfs.filter(p => p.pdf_ua === 0).length;
+  const pct = (n) => total ? Math.round(n / total * 100) : 0;
+
+  const dateStrings = allPdfs
+    .map(p => {
+      const m = String(p.creation_date || '').match(/(\d{4})(\d{2})(\d{2})/);
+      return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+    })
+    .filter(Boolean)
+    .sort();
+  const oldest = dateStrings[0];
+  const newest = dateStrings[dateStrings.length - 1];
+  const avgPages = total ? Math.round(totalPages / total) : 0;
+  const avgSize = total ? totalBytes / total : 0;
+
+  const byCreator = countBy(allPdfs, 'creator');
+  const byProducer = countBy(allPdfs, 'producer');
+  const byAuthor = countBy(allPdfs, 'author');
+  const bySite = countBy(allPdfs, 'site_name');
+
+  const overview = `
+    <div class="report-grid">
+      ${statCard('Total PDFs', total.toLocaleString())}
+      ${statCard('Total Pages', totalPages.toLocaleString(), `~${avgPages} per PDF`)}
+      ${statCard('Total Size', fmtSize(totalBytes), `~${fmtSize(avgSize)} per PDF`)}
+      ${statCard('Errors', errors, `${pct(errors)}% failed to parse`)}
+    </div>
+  `;
+
+  const accessibility = `
+    <div class="report-section-title">Accessibility</div>
+    <div class="report-grid">
+      ${statCard('Tagged PDFs', `${taggedYes} / ${total}`, `${pct(taggedYes)}% Yes · ${pct(taggedNo)}% No · ${pct(taggedUnknown)}% Unknown`)}
+      ${statCard('PDF/UA Compliant', `${pdfuaYes} / ${total}`, `${pct(pdfuaYes)}% of total`)}
+    </div>
+  `;
+
+  const dates = (oldest && newest) ? `
+    <div class="report-section-title">Creation Dates</div>
+    <div class="report-grid">
+      ${statCard('Oldest', `<span style="font-size:1.1rem">${esc(oldest)}</span>`)}
+      ${statCard('Newest', `<span style="font-size:1.1rem">${esc(newest)}</span>`)}
+    </div>
+  ` : '';
+
+  const breakdowns = `
+    <div class="report-section-title">Breakdowns</div>
+    ${selectedSiteId == null && bySite.length > 1 ? topListHtml('PDFs per Application (site)', bySite) : ''}
+    ${topListHtml('Top PDF Applications (Creator field)', byCreator)}
+    ${topListHtml('Top PDF Producers', byProducer)}
+    ${topListHtml('Top Authors', byAuthor)}
+  `;
+
+  el.innerHTML = overview + accessibility + dates + breakdowns;
+}
+
+$('#filter').addEventListener('input', renderPdfs);
+
+async function startBulk(form) {
+  const status = $('#status');
+  const urls = form.get('urls').split('\n').map(s => s.trim()).filter(Boolean);
+  if (!urls.length) {
+    status.className = 'status error';
+    status.textContent = 'Please enter at least one URL.';
+    return;
+  }
+  status.className = 'status busy';
+  status.textContent = `Submitting ${urls.length} URL${urls.length > 1 ? 's' : ''}...`;
+  $('#scrape-form button').disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('urls', urls.join('\n'));
+    fd.append('mode', form.get('mode'));
+    fd.append('max_pages', form.get('max_pages'));
+    fd.append('max_depth', form.get('max_depth'));
+    if (form.get('use_browser')) fd.append('use_browser', 'on');
+    const res = await fetch('/api/scrape/bulk', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Request failed');
+    status.className = 'status ok';
+    let msg = `Enqueued ${data.enqueued} job${data.enqueued !== 1 ? 's' : ''}.`;
+    if (data.errors && data.errors.length) {
+      msg += ` ${data.errors.length} skipped (${data.errors.map(e => e.url).join(', ')}).`;
+    }
+    status.textContent = msg;
+    await loadSitesAndPdfs();
+  } catch (e) {
+    status.className = 'status error';
+    status.textContent = `Error: ${e.message}`;
+  } finally {
+    $('#scrape-form button').disabled = false;
+  }
+}
+
+async function startOne(url, mode, useBrowser) {
+  const status = $('#status');
+  status.className = 'status busy';
+  status.textContent = `Re-running ${url}...`;
+  try {
+    const fd = new FormData();
+    fd.append('url', url);
+    fd.append('mode', mode);
+    fd.append('max_pages', $('input[name=max_pages]').value);
+    fd.append('max_depth', $('input[name=max_depth]').value);
+    if (useBrowser) fd.append('use_browser', 'on');
+    const res = await fetch('/api/scrape', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Request failed');
+    status.className = 'status ok';
+    status.textContent = 'Job started.';
+    await loadSitesAndPdfs();
+  } catch (e) {
+    status.className = 'status error';
+    status.textContent = `Error: ${e.message}`;
+  }
+}
+
+$('#scrape-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  startBulk(new FormData(e.target));
+});
+
+$('#sites').addEventListener('click', async (e) => {
+  if (e.target.dataset.rescrape) {
+    e.stopPropagation();
+    startOne(
+      e.target.dataset.rescrape,
+      e.target.dataset.mode || 'page',
+      e.target.dataset.useBrowser === '1',
+    );
+  } else if (e.target.dataset.continue) {
+    e.stopPropagation();
+    const fd = new FormData();
+    fd.append('max_pages', $('input[name=max_pages]').value);
+    fd.append('max_depth', $('input[name=max_depth]').value);
+    const status = $('#status');
+    status.className = 'status busy';
+    status.textContent = 'Continuing crawl...';
+    try {
+      const res = await fetch(`/api/sites/${e.target.dataset.continue}/continue`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      status.className = 'status ok';
+      status.textContent = 'Continue job started.';
+    } catch (err) {
+      status.className = 'status error';
+      status.textContent = `Error: ${err.message}`;
+    }
+    loadSitesAndPdfs();
+  } else if (e.target.dataset.cancel) {
+    e.stopPropagation();
+    await fetch(`/api/sites/${e.target.dataset.cancel}/cancel`, { method: 'POST' });
+    loadSitesAndPdfs();
+  } else if (e.target.dataset.rename) {
+    e.stopPropagation();
+    const current = e.target.dataset.current || '';
+    const next = prompt('Custom name for this site (leave blank to clear):', current);
+    if (next === null) return;
+    const fd = new FormData();
+    fd.append('name', next);
+    await fetch(`/api/sites/${e.target.dataset.rename}`, { method: 'PATCH', body: fd });
+    loadSitesAndPdfs();
+  } else if (e.target.dataset.deleteSite) {
+    e.stopPropagation();
+    if (!confirm('Delete this site, its database file, and all its PDFs?')) return;
+    const id = e.target.dataset.deleteSite;
+    if (Number(id) === selectedSiteId) selectedSiteId = null;
+    await fetch(`/api/sites/${id}`, { method: 'DELETE' });
+    loadSitesAndPdfs();
+  }
+});
+
+loadSitesAndPdfs();
+</script>
+</body>
+</html>
